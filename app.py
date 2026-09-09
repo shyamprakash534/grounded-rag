@@ -2,6 +2,7 @@ import hashlib
 import io
 import json
 import os
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -24,6 +25,30 @@ DATA_DIR = os.getenv("DATA_DIR", str(BASE_DIR / "data"))
 MAX_BYTES = 10 * 1024 * 1024
 MAX_CHUNKS = 500
 
+DEMO_SOURCES = [
+    {
+        "label": "S1",
+        "filename": "Grounded RAG Product Brief.md",
+        "page": None,
+        "text": "Grounded RAG is an evidence-first knowledge assistant. It accepts PDF, TXT, and Markdown files, splits readable text into overlapping chunks, creates embeddings, retrieves the most relevant chunks, and asks an AI model to answer using only those excerpts. Answers cite retrieved evidence with labels such as [S1].",
+        "keywords": {"grounded", "rag", "assistant", "pdf", "txt", "markdown", "chunks", "embeddings", "retrieves", "evidence"},
+    },
+    {
+        "label": "S2",
+        "filename": "Grounded RAG Product Brief.md",
+        "page": None,
+        "text": "The live portfolio deployment is designed to demonstrate the interface and retrieval experience without requiring a recruiter to install software or provide an API key. Full AI generation is available in local mode with Ollama, using llama3.2:3b for chat and nomic-embed-text for embeddings.",
+        "keywords": {"live", "portfolio", "deployment", "recruiter", "api", "key", "ollama", "llama3.2", "nomic", "local"},
+    },
+    {
+        "label": "S3",
+        "filename": "Grounded RAG Engineering Notes.md",
+        "page": None,
+        "text": "The backend is built with Python and FastAPI. ChromaDB stores vectors using cosine similarity. Uploads are limited to 10 MB and PDFs to 200 pages. The application also validates questions, limits retrieval to six sources, and exposes a public health endpoint.",
+        "keywords": {"python", "fastapi", "chromadb", "cosine", "10", "mb", "200", "pages", "six", "health"},
+    },
+]
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     client = chromadb.PersistentClient(path=DATA_DIR, settings=chromadb.Settings(anonymized_telemetry=False))
@@ -33,7 +58,7 @@ async def lifespan(application: FastAPI):
     )
     yield
 
-app = FastAPI(title="Grounded RAG API", version="1.2.0", lifespan=lifespan)
+app = FastAPI(title="Grounded RAG API", version="1.3.0", lifespan=lifespan)
 
 def index():
     return app.state.collection
@@ -42,7 +67,7 @@ def require_api_key(authorization: str | None = Header(default=None)):
     if not APP_API_KEY:
         return
     expected = f"Bearer {APP_API_KEY}"
-    if not authorization or not authorization.strip() == expected:
+    if not authorization or authorization.strip() != expected:
         raise HTTPException(401, "Valid API key required.", headers={"WWW-Authenticate": "Bearer"})
 
 def _request(method: str, url: str, payload: dict) -> dict:
@@ -126,13 +151,48 @@ class Question(BaseModel):
             raise ValueError("Question cannot be blank.")
         return value
 
+def demo_rank(question: str, top_k: int) -> list[dict]:
+    tokens = set(re.findall(r"[a-z0-9.]+", question.lower()))
+    ranked = []
+    for source in DEMO_SOURCES:
+        score = len(tokens & source["keywords"])
+        ranked.append((score, source))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    selected = [source for score, source in ranked if score > 0][:top_k]
+    return selected or [DEMO_SOURCES[0]]
+
+def demo_answer(question: str, sources: list[dict]) -> str:
+    q = question.lower()
+    if "what is" in q and ("grounded rag" in q or "rag" in q):
+        return "Grounded RAG is an evidence-first knowledge assistant that retrieves relevant document chunks and uses those excerpts to produce source-grounded answers. The interface is designed to make the supporting evidence visible with citations such as [S1]."
+    if "how" in q and ("work" in q or "works" in q):
+        return "The workflow is: upload a supported document, split its readable text into overlapping chunks, create embeddings, retrieve the most relevant chunks, and generate an answer constrained to those excerpts. [S1]"
+    if "stack" in q or "technology" in q or "technologies" in q:
+        return "The project uses Python and FastAPI for the backend, ChromaDB for cosine-similarity vector retrieval, and Ollama in local full-AI mode. The default local models are llama3.2:3b for chat and nomic-embed-text for embeddings. [S2] [S3]"
+    if "recruit" in q or "live" in q or "demo" in q or "api key" in q:
+        return "The portfolio demo is intentionally usable without a recruiter installing software or entering an API key. Full AI generation remains available in local mode through Ollama. [S2]"
+    if "limit" in q or "upload" in q or "pdf" in q:
+        return "Uploads are limited to 10 MB, PDFs are limited to 200 pages, and retrieval can return up to six sources. [S3]"
+    excerpts = " ".join(f"[{s['label']}] {s['text']}" for s in sources)
+    return f"The live demo found relevant evidence in the project knowledge base. {excerpts}"
+
 @app.get("/", include_in_schema=False)
 def home():
     return FileResponse(BASE_DIR / "index.html")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "provider": PROVIDER, "indexed_chunks": index().count(), "chat_model": CHAT_MODEL, "embedding_model": EMBED_MODEL, "auth_enabled": bool(APP_API_KEY)}
+    return {"status": "ok", "provider": PROVIDER, "indexed_chunks": index().count(), "chat_model": CHAT_MODEL, "embedding_model": EMBED_MODEL, "auth_enabled": bool(APP_API_KEY), "demo_mode": True}
+
+@app.get("/api/demo")
+def demo_info():
+    return {"enabled": True, "sources": [{"label": s["label"], "filename": s["filename"], "page": s["page"], "text": s["text"]} for s in DEMO_SOURCES]}
+
+@app.post("/api/demo/ask")
+def demo_ask(body: Question):
+    sources = demo_rank(body.question, body.top_k)
+    answer = demo_answer(body.question, sources)
+    return {"mode": "demo", "answer": answer, "sources": [{k: s[k] for k in ("label", "filename", "page", "text")} for s in sources]}
 
 @app.post("/api/documents", dependencies=[Depends(require_api_key)])
 def upload(file: UploadFile = File(...)):
