@@ -7,7 +7,7 @@ from pathlib import Path
 
 import chromadb
 import httpx
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 from pypdf import PdfReader
@@ -17,6 +17,7 @@ PROVIDER = os.getenv("AI_PROVIDER", "ollama").lower()
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 AI_BASE_URL = os.getenv("AI_BASE_URL", "").rstrip("/")
 AI_API_KEY = os.getenv("AI_API_KEY", "")
+APP_API_KEY = os.getenv("APP_API_KEY", "")
 CHAT_MODEL = os.getenv("CHAT_MODEL", "llama3.2:3b")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
 DATA_DIR = os.getenv("DATA_DIR", str(BASE_DIR / "data"))
@@ -25,20 +26,24 @@ MAX_CHUNKS = 500
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    client = chromadb.PersistentClient(
-        path=DATA_DIR,
-        settings=chromadb.Settings(anonymized_telemetry=False),
-    )
+    client = chromadb.PersistentClient(path=DATA_DIR, settings=chromadb.Settings(anonymized_telemetry=False))
     key = hashlib.sha256(f"v2:{PROVIDER}:{EMBED_MODEL}".encode()).hexdigest()[:12]
     application.state.collection = client.get_or_create_collection(
         name=f"grounded_{key}", embedding_function=None, metadata={"hnsw:space": "cosine"}
     )
     yield
 
-app = FastAPI(title="Grounded RAG API", version="1.1.0", lifespan=lifespan)
+app = FastAPI(title="Grounded RAG API", version="1.2.0", lifespan=lifespan)
 
 def index():
     return app.state.collection
+
+def require_api_key(authorization: str | None = Header(default=None)):
+    if not APP_API_KEY:
+        return
+    expected = f"Bearer {APP_API_KEY}"
+    if not authorization or not authorization.strip() == expected:
+        raise HTTPException(401, "Valid API key required.", headers={"WWW-Authenticate": "Bearer"})
 
 def _request(method: str, url: str, payload: dict) -> dict:
     headers = {"Content-Type": "application/json"}
@@ -127,9 +132,9 @@ def home():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "provider": PROVIDER, "indexed_chunks": index().count(), "chat_model": CHAT_MODEL, "embedding_model": EMBED_MODEL}
+    return {"status": "ok", "provider": PROVIDER, "indexed_chunks": index().count(), "chat_model": CHAT_MODEL, "embedding_model": EMBED_MODEL, "auth_enabled": bool(APP_API_KEY)}
 
-@app.post("/api/documents")
+@app.post("/api/documents", dependencies=[Depends(require_api_key)])
 def upload(file: UploadFile = File(...)):
     filename = (file.filename or "document.txt").replace("\\", "/")
     filename = filename.rsplit("/", 1)[-1][:200] or "document.txt"
@@ -160,7 +165,7 @@ def upload(file: UploadFile = File(...)):
     index().upsert(ids=[f"{document_id}:{i}" for i in range(len(texts))], embeddings=vectors, documents=texts, metadatas=metadata)
     return {"document_id": document_id, "filename": filename, "chunks": len(texts), "status": "indexed"}
 
-@app.get("/api/documents")
+@app.get("/api/documents", dependencies=[Depends(require_api_key)])
 def documents():
     records = index().get(include=["metadatas"])
     grouped = {}
@@ -171,14 +176,14 @@ def documents():
         grouped[key]["chunks"] += 1
     return {"documents": sorted(grouped.values(), key=lambda item: item["filename"].lower())}
 
-@app.delete("/api/documents/{document_id}")
+@app.delete("/api/documents/{document_id}", dependencies=[Depends(require_api_key)])
 def delete(document_id: str):
     if not index().get(where={"document_id": document_id}, limit=1)["ids"]:
         raise HTTPException(404, "Document not found.")
     index().delete(where={"document_id": document_id})
     return {"status": "deleted"}
 
-@app.post("/api/ask")
+@app.post("/api/ask", dependencies=[Depends(require_api_key)])
 def ask(body: Question):
     count = index().count()
     if not count:
