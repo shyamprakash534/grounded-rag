@@ -3,195 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Grounded | Local RAG Knowledge Base</title>
+<title>Grounded | RAG Knowledge Base</title>
 <style>
-:root{font-family:system-ui,sans-serif;color:#e8eaf4;background:#101321}
-*{box-sizing:border-box}
-body{margin:0}
-.layout{display:grid;grid-template-columns:300px 1fr;min-height:100vh}
-aside{background:#191d30;padding:28px;border-right:1px solid #30364b}
-main{width:100%;max-width:1000px;margin:auto;padding:40px}
-h1{font-size:36px;margin:0 0 12px}
-h2{font-size:19px}
-.brand{font-size:28px;font-weight:800;color:#b2a7ff}
-p,small{color:#aeb6ce;line-height:1.7}
-a{color:#b2a7ff}
-input,textarea,button,select{font:inherit}
-input[type=file]{width:100%;margin:14px 0;font-size:12px}
-button{background:#8a73f2;color:white;border:0;border-radius:9px;
-padding:11px 16px;cursor:pointer}
-button:disabled{opacity:.5;cursor:wait}
-textarea{width:100%;padding:16px;color:#e8eaf4;background:#191d30;
-border:1px solid #39415c;border-radius:12px;resize:vertical}
-.actions{display:flex;justify-content:space-between;align-items:center;
-gap:12px;margin-top:12px}
-select{padding:6px;background:#191d30;color:white;border:1px solid #39415c}
-.card{background:#191d30;border:1px solid #30364b;border-radius:14px;
-padding:24px;margin-top:24px}
-.answer{white-space:pre-wrap;line-height:1.8;overflow-wrap:anywhere}
-.doc{display:flex;align-items:center;gap:8px;padding:12px 0;
-border-bottom:1px solid #30364b}
-.doc span{flex:1;overflow-wrap:anywhere;font-size:13px}
-.doc button{padding:5px 10px;background:#353b53}
-.status{font-size:12px;overflow-wrap:anywhere}
-details{margin-top:10px;border:1px solid #39415c;padding:12px;border-radius:8px}
-summary{cursor:pointer;color:#b2a7ff;font-size:13px;overflow-wrap:anywhere}
-.excerpt{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}
-.error{color:#ff9baf}
-footer{margin-top:36px;font-size:12px;color:#aeb6ce}
-@media(max-width:700px){.layout{display:block}main{padding:24px}
-aside{border-right:0;border-bottom:1px solid #30364b}}
+:root{font-family:system-ui,sans-serif;color:#e8eaf4;background:#101321}*{box-sizing:border-box}body{margin:0}.layout{display:grid;grid-template-columns:300px 1fr;min-height:100vh}aside{background:#191d30;padding:28px;border-right:1px solid #30364b}main{width:100%;max-width:1000px;margin:auto;padding:40px}h1{font-size:36px;margin:0 0 12px}h2{font-size:19px}.brand{font-size:28px;font-weight:800;color:#b2a7ff}p,small{color:#aeb6ce;line-height:1.7}a{color:#b2a7ff}input,textarea,button,select{font:inherit}input[type=file],input[type=password]{width:100%;margin:14px 0;font-size:12px;padding:10px;background:#101321;color:#e8eaf4;border:1px solid #39415c;border-radius:9px}button{background:#8a73f2;color:white;border:0;border-radius:9px;padding:11px 16px;cursor:pointer}button:disabled{opacity:.5;cursor:wait}textarea{width:100%;padding:16px;color:#e8eaf4;background:#191d30;border:1px solid #39415c;border-radius:12px;resize:vertical}.actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px}select{padding:6px;background:#191d30;color:white;border:1px solid #39415c}.card{background:#191d30;border:1px solid #30364b;border-radius:14px;padding:24px;margin-top:24px}.answer{white-space:pre-wrap;line-height:1.8;overflow-wrap:anywhere}.doc{display:flex;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid #30364b}.doc span{flex:1;overflow-wrap:anywhere;font-size:13px}.doc button{padding:5px 10px;background:#353b53}.status{font-size:12px;overflow-wrap:anywhere}details{margin-top:10px;border:1px solid #39415c;padding:12px;border-radius:8px}summary{cursor:pointer;color:#b2a7ff;font-size:13px;overflow-wrap:anywhere}.excerpt{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}.error{color:#ff9baf}footer{margin-top:36px;font-size:12px;color:#aeb6ce}@media(max-width:700px){.layout{display:block}main{padding:24px}aside{border-right:0;border-bottom:1px solid #30364b}}
 </style>
 </head>
 <body>
-<div class="layout">
-<aside>
-<div class="brand">grounded.</div>
-<p>Your documents. Local AI.<br>Answers with sources.</p>
-<h2>Add knowledge</h2>
-<form id="upload">
-<label for="file">PDF, TXT, or Markdown</label>
-<input id="file" type="file" accept=".pdf,.txt,.md" required>
-<button id="uploadButton">Index document</button>
-</form>
-<p id="status" class="status" role="status">Maximum file size: 10 MB.</p>
-<h2>Document library</h2>
-<div id="documents"></div>
-<footer>Powered by FastAPI, ChromaDB, and Ollama.</footer>
-</aside>
-<main>
-<h1>Ask your knowledge.</h1>
-<p>Upload a document, ask a question, and explore the retrieved evidence.</p>
-<form id="ask">
-<label for="question">Your question</label>
-<textarea id="question" rows="3" maxlength="2000"
-placeholder="What are the key points in my documents?" required></textarea>
-<div class="actions">
-<label>Sources
-<select id="topK">
-<option>2</option><option selected>4</option><option>6</option>
-</select>
-</label>
-<button id="askButton">Ask Grounded</button>
-</div>
-</form>
-<div id="results" aria-live="polite"></div>
-<footer>
-Each question is independent. AI can make mistakes; verify the sources.
-<br><a href="/docs">Explore the REST API</a>
-</footer>
-</main>
-</div>
+<div class="layout"><aside><div class="brand">grounded.</div><p>Your documents. AI answers.<br>Every answer shows evidence.</p><section id="auth"><h2>Access</h2><label for="apiKey">API key</label><input id="apiKey" type="password" autocomplete="off" placeholder="Enter your access key"><button id="saveKey" type="button">Unlock</button><p id="authStatus" class="status">Use the key configured for this deployment.</p></section><section id="workspace" hidden><h2>Add knowledge</h2><form id="upload"><label for="file">PDF, TXT, or Markdown</label><input id="file" type="file" accept=".pdf,.txt,.md" required><button id="uploadButton">Index document</button></form><p id="status" class="status">Maximum file size: 10 MB.</p><h2>Document library</h2><div id="documents"></div><button id="logout" type="button">Lock</button></section><footer>Powered by FastAPI, ChromaDB, and your AI provider.</footer></aside><main><h1>Ask your knowledge.</h1><p>Upload a document, ask a question, and inspect the retrieved evidence.</p><form id="ask"><label for="question">Your question</label><textarea id="question" rows="3" maxlength="2000" placeholder="What are the key points in my documents?" required></textarea><div class="actions"><label>Sources <select id="topK"><option>2</option><option selected>4</option><option>6</option></select></label><button id="askButton">Ask Grounded</button></div></form><div id="results" aria-live="polite"></div><footer>Each question is independent. AI can make mistakes; verify the retrieved sources.<br><a href="/docs">Explore the REST API</a></footer></main></div>
 <script>
-const $ = id => document.getElementById(id);
-
-function node(tag, text, className) {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (className) el.className = className;
-  return el;
-}
-
-async function api(path, options = {}) {
-  const response = await fetch(path, options);
-  const data = await response.json();
-  if (!response.ok) {
-    const message = typeof data.detail === "string"
-      ? data.detail : "Invalid request. Check your input.";
-    throw new Error(message);
-  }
-  return data;
-}
-
-async function refresh() {
-  const data = await api("/api/documents");
-  $("documents").replaceChildren();
-  if (!data.documents.length) {
-    $("documents").append(node("p", "No documents indexed yet."));
-  }
-  for (const doc of data.documents) {
-    const row = node("div", undefined, "doc");
-    row.append(node("span", `${doc.filename} (${doc.chunks} chunks)`));
-    const remove = node("button", "Delete");
-    remove.type = "button";
-    remove.setAttribute("aria-label", `Delete ${doc.filename}`);
-    remove.onclick = async () => {
-      if (!confirm(`Delete ${doc.filename}?`)) return;
-      remove.disabled = true;
-      try {
-        await api(`/api/documents/${doc.document_id}`, {method:"DELETE"});
-        await refresh();
-      } catch (error) {
-        $("status").textContent = error.message;
-        remove.disabled = false;
-      }
-    };
-    row.append(remove);
-    $("documents").append(row);
-  }
-}
-
-$("upload").onsubmit = async event => {
-  event.preventDefault();
-  const file = $("file").files[0];
-  if (!file) return;
-  if (file.size > 10 * 1024 * 1024) {
-    $("status").textContent = "Maximum file size is 10 MB.";
-    return;
-  }
-  $("uploadButton").disabled = true;
-  $("status").textContent = "Extracting text and generating embeddings...";
-  const form = new FormData();
-  form.append("file", file);
-  try {
-    const data = await api("/api/documents", {method:"POST", body:form});
-    await refresh();
-    $("status").textContent = `${data.status}: ${data.chunks} chunks.`;
-    $("upload").reset();
-  } catch (error) {
-    $("status").textContent = error.message;
-  } finally {
-    $("uploadButton").disabled = false;
-  }
-};
-
-$("ask").onsubmit = async event => {
-  event.preventDefault();
-  const question = $("question").value.trim();
-  if (!question) return;
-  $("askButton").disabled = true;
-
-  const card = node("article", undefined, "card");
-  const answer = node("div", "Searching and generating an answer...", "answer");
-  card.append(node("h2", question), answer);
-  $("results").prepend(card);
-
-  try {
-    const data = await api("/api/ask", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({question, top_k:Number($("topK").value)})
-    });
-    answer.textContent = data.answer;
-    card.append(node("h3", "Retrieved sources"));
-    for (const source of data.sources) {
-      const details = node("details");
-      const page = source.page ? ` | page ${source.page}` : "";
-      details.append(
-        node("summary", `[${source.label}] ${source.filename}${page}`),
-        node("p", source.text, "excerpt")
-      );
-      card.append(details);
-    }
-  } catch (error) {
-    answer.textContent = error.message;
-    answer.classList.add("error");
-  } finally {
-    $("askButton").disabled = false;
-  }
-};
-
-refresh().catch(error => { $("status").textContent = error.message; });
-</script>
-</body>
-</html>
+const $=id=>document.getElementById(id);
+function node(tag,text,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el}
+function authHeaders(){const key=localStorage.getItem("grounded_api_key");return key?{"Authorization":`Bearer ${key}`}:{}}
+async function api(path,options={}){const headers={...authHeaders(),...(options.headers||{})};const response=await fetch(path,{...options,headers});let data={};try{data=await response.json()}catch{}if(!response.ok){const message=typeof data.detail==="string"?data.detail:(response.status===401?"Invalid API key.":"Invalid request. Check your input.");throw new Error(message)}return data}
+function setUnlocked(unlocked){$("auth").hidden=unlocked;$("workspace").hidden=!unlocked}
+async function refresh(){const data=await api("/api/documents");$("documents").replaceChildren();if(!data.documents.length)$("documents").append(node("p","No documents indexed yet."));for(const doc of data.documents){const row=node("div",undefined,"doc");row.append(node("span",`${doc.filename} (${doc.chunks} chunks)`));const remove=node("button","Delete");remove.type="button";remove.onclick=async()=>{if(!confirm(`Delete ${doc.filename}?`))return;remove.disabled=true;try{await api(`/api/documents/${doc.document_id}`,{method:"DELETE"});await refresh()}catch(error){$("status").textContent=error.message;remove.disabled=false}};row.append(remove);$("documents").append(row)}}
+async function unlock(){const key=$("apiKey").value.trim();if(!key){$("authStatus").textContent="Enter your API key.";return}localStorage.setItem("grounded_api_key",key);try{await api("/api/documents");setUnlocked(true);$("authStatus").textContent="Unlocked.";await refresh()}catch(error){localStorage.removeItem("grounded_api_key");$("authStatus").textContent=error.message}}
+$("saveKey").onclick=unlock;$("apiKey").onkeydown=e=>{if(e.key==="Enter")unlock()};$("logout").onclick=()=>{localStorage.removeItem("grounded_api_key");setUnlocked(false);$("apiKey").value=""};
+$("upload").onsubmit=async event=>{event.preventDefault();const file=$("file").files[0];if(!file)return;if(file.size>10*1024*1024){$("status").textContent="Maximum file size is 10 MB.";return}$("uploadButton").disabled=true;$("status").textContent="Extracting text and generating embeddings...";const form=new FormData();form.append("file",file);try{const data=await api("/api/documents",{method:"POST",body:form});await refresh();$("status").textContent=`${data.status}: ${data.chunks} chunks.`;$("upload").reset()}catch(error){$("status").textContent=error.message)}finally{$("uploadButton").disabled=false}};
+$("ask").onsubmit=async event=>{event.preventDefault();const question=$("question").value.trim();if(!question)return;$("askButton").disabled=true;const card=node("article",undefined,"card");const answer=node("div","Searching and generating an answer...","answer");card.append(node("h2",question),answer);$("results").prepend(card);try{const data=await api("/api/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question,top_k:Number($("topK").value)})});answer.textContent=data.answer;card.append(node("h3","Retrieved sources"));for(const source of data.sources){const details=node("details");const page=source.page?` | page ${source.page}`:"";details.append(node("summary",`[${source.label}] ${source.filename}${page}`),node("p",source.text,"excerpt"));card.append(details)}}catch(error){answer.textContent=error.message;answer.classList.add("error")}finally{$("askButton").disabled=false}};
+const saved=localStorage.getItem("grounded_api_key");if(saved){$("apiKey").value=saved;unlock()}
+</script></body></html>
