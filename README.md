@@ -2,6 +2,10 @@
 
 A document-grounded question-answering application built with Python, FastAPI, ChromaDB, and Ollama.
 
+## Hosted document search
+
+The portfolio server runs with `AI_PROVIDER=extractive`. It indexes keyword vectors in ChromaDB and returns a matching passage with its source. It requires no model credentials. Uploaded documents are shared on the demo server. The default local configuration uses Ollama for embeddings and generated answers.
+
 ## 🚀 Live UI
 
 The web application is deployed on Render:
